@@ -7,12 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from config import get_jwt_auth_manager, get_s3_storage_client
+from config import get_s3_storage_client
 from database import get_db, UserModel, UserProfileModel
 from database.models.accounts import GenderEnum
-from exceptions import TokenExpiredError, S3FileUploadError, S3ConnectionError
+from exceptions import S3FileUploadError, S3ConnectionError
 from schemas.profiles import ProfileResponseSchema, ProfileSchema
-from security.interfaces import JWTAuthManagerInterface
 from security.utils import require_authorization
 from storages import S3StorageInterface
 
@@ -22,7 +21,8 @@ router = APIRouter()
 # Write your code here
 @router.post(
     path="/users/{user_id}/profile/",
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
+    response_model=ProfileResponseSchema
 )
 async def create_profile(
         user_id: int,
@@ -37,7 +37,6 @@ async def create_profile(
         s3_client: S3StorageInterface = Depends(get_s3_storage_client),
         retrieved_user_id: int = Depends(require_authorization)
 ) -> ProfileResponseSchema:
-
     profile = ProfileSchema(
         first_name=first_name,
         last_name=last_name,
@@ -69,7 +68,10 @@ async def create_profile(
         .options(selectinload(UserModel.profile))
         .where(UserModel.id == user_id)
     )
-    user_db = target_user.scalar_one_or_none() if user_id != retrieved_user_id else user_db
+    target_user = target_user.scalar_one_or_none()
+    if not target_user:
+        HTTPException(status_code=401, detail="User not found or not active.")
+    user_db = target_user if user_id != retrieved_user_id else user_db
     if user_db.profile:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -99,6 +101,7 @@ async def create_profile(
     )
     db.add(db_profile)
     await db.commit()
+    await db.refresh(db_profile)
     return ProfileResponseSchema.model_validate(
         {**db_profile.__dict__, "avatar": url}
     )

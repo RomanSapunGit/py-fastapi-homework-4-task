@@ -19,7 +19,7 @@ from database import (
 )
 from database.session_postgresql import settings
 from exceptions import BaseSecurityError
-from notifications import EmailSenderInterface, EmailSender
+from notifications import EmailSenderInterface
 from schemas import (
     UserRegistrationRequestSchema,
     UserRegistrationResponseSchema,
@@ -126,7 +126,6 @@ async def register_user(
             f"{settings.FRONTEND_BASE_URL}/"
             f"{str(request.url_for('activate_account')).replace(str(request.base_url), '')}"
         )
-        print(activation_url)
         background_tasks.add_task(
             email_sender.send_activation_email,
             new_user.email,
