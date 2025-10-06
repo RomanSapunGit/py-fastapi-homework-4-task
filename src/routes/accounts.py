@@ -122,7 +122,6 @@ async def register_user(
         activation_token = ActivationTokenModel(user_id=new_user.id)
         db.add(activation_token)
 
-
         await db.commit()
         await db.refresh(new_user)
         activation_url = (
@@ -235,7 +234,6 @@ async def activate_account(
 
     user.is_active = True
 
-
     await db.delete(token_record)
     await db.commit()
 
@@ -297,7 +295,6 @@ async def request_password_reset_token(
     reset_token = PasswordResetTokenModel(user_id=cast(int, user.id))
     db.add(reset_token)
 
-
     await db.commit()
     reset_pass_url = (
         f"{settings.FRONTEND_BASE_URL}/"
@@ -323,8 +320,8 @@ async def request_password_reset_token(
     responses={
         400: {
             "description": (
-                    "Bad Request - The provided email or token is invalid, "
-                    "the token has expired, or the user account is not active."
+                "Bad Request - The provided email or token is invalid, "
+                "the token has expired, or the user account is not active."
             ),
             "content": {
                 "application/json": {

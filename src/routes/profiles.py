@@ -70,7 +70,7 @@ async def create_profile(
     )
     target_user = target_user.scalar_one_or_none()
     if not target_user:
-       raise HTTPException(status_code=401, detail="User not found or not active.")
+        raise HTTPException(status_code=401, detail="User not found or not active.")
 
     if not target_user.is_active:
         raise HTTPException(
