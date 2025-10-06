@@ -17,7 +17,6 @@ from database import (
     PasswordResetTokenModel,
     RefreshTokenModel
 )
-from database.session_postgresql import settings
 from exceptions import BaseSecurityError
 from notifications import EmailSenderInterface
 from schemas import (
@@ -71,6 +70,7 @@ async def register_user(
         request: Request,
         background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_db),
+        settings: BaseAppSettings = Depends(get_settings),
         email_sender: EmailSenderInterface = Depends(get_accounts_email_notificator),
 ) -> UserRegistrationResponseSchema:
     """
@@ -122,18 +122,19 @@ async def register_user(
         activation_token = ActivationTokenModel(user_id=new_user.id)
         db.add(activation_token)
 
+
+        await db.commit()
+        await db.refresh(new_user)
         activation_url = (
             f"{settings.FRONTEND_BASE_URL}/"
             f"{str(request.url_for('activate_account')).replace(str(request.base_url), '')}"
+            f"?token={activation_token.token}"
         )
         background_tasks.add_task(
             email_sender.send_activation_email,
             new_user.email,
             str(activation_url)
         )
-
-        await db.commit()
-        await db.refresh(new_user)
     except SQLAlchemyError as e:
         await db.rollback()
         raise HTTPException(
@@ -180,6 +181,7 @@ async def activate_account(
         request: Request,
         background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_db),
+        settings: BaseAppSettings = Depends(get_settings),
         email_sender: EmailSenderInterface = Depends(get_accounts_email_notificator),
 ) -> MessageResponseSchema:
     """
@@ -233,6 +235,10 @@ async def activate_account(
 
     user.is_active = True
 
+
+    await db.delete(token_record)
+    await db.commit()
+
     login_url = (
         f"{settings.FRONTEND_BASE_URL}/"
         f"{str(request.url_for('login_user')).replace(str(request.base_url), '')}"
@@ -242,9 +248,6 @@ async def activate_account(
         user.email,
         str(login_url)
     )
-
-    await db.delete(token_record)
-    await db.commit()
 
     return MessageResponseSchema(message="User account activated successfully.")
 
@@ -264,6 +267,7 @@ async def request_password_reset_token(
         request: Request,
         background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_db),
+        settings: BaseAppSettings = Depends(get_settings),
         email_sender: EmailSenderInterface = Depends(get_accounts_email_notificator),
 ) -> MessageResponseSchema:
     """
@@ -293,18 +297,18 @@ async def request_password_reset_token(
     reset_token = PasswordResetTokenModel(user_id=cast(int, user.id))
     db.add(reset_token)
 
+
+    await db.commit()
     reset_pass_url = (
         f"{settings.FRONTEND_BASE_URL}/"
         f"{str(request.url_for('reset_password')).replace(str(request.base_url), '')}"
+        f"?token={reset_token.token}"
     )
     background_tasks.add_task(
         email_sender.send_password_reset_email,
         user.email,
         str(reset_pass_url)
     )
-
-    await db.commit()
-
     return MessageResponseSchema(
         message="If you are registered, you will receive an email with instructions."
     )
@@ -319,8 +323,8 @@ async def request_password_reset_token(
     responses={
         400: {
             "description": (
-                "Bad Request - The provided email or token is invalid, "
-                "the token has expired, or the user account is not active."
+                    "Bad Request - The provided email or token is invalid, "
+                    "the token has expired, or the user account is not active."
             ),
             "content": {
                 "application/json": {
@@ -358,6 +362,7 @@ async def reset_password(
         request: Request,
         background_tasks: BackgroundTasks,
         db: AsyncSession = Depends(get_db),
+        settings: BaseAppSettings = Depends(get_settings),
         email_sender: EmailSenderInterface = Depends(get_accounts_email_notificator),
 ) -> MessageResponseSchema:
     """
